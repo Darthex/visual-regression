@@ -45,16 +45,29 @@ jobs:
         uses: actions/cache@v3
         with:
           path: .snapshots
-          key: snapshots-${{ github.head_ref || github.ref_name }}
+          key: snapshot-cache-main
           restore-keys: |
-            snapshots-
+            snapshot-cache-
+
+      - name: Update snapshots if requested
+        if: contains(github.event.head_commit.message, '--update-snapshot')
+        run: |
+          echo "Updating snapshots..."
+          STORYBOOK_URL=http://localhost:6006 npx playwright test --update-snapshots
+
+      - name: Save updated snapshots to cache
+        if: contains(github.event.head_commit.message, '--update-snapshot')
+        uses: actions/cache@v3
+        with:
+          path: .snapshots
+          key: snapshot-cache-main
+          overwrite: true
 
       - name: Run Visual Tests
         run: |
           STORYBOOK_URL=http://localhost:6006 npx playwright test || echo "failed" > test-status.txt
 
       - name: Upload diff comment if test failed
-        if: failure()
         run: |
           DIFF=$(find .playwright -name "*.diff.png" | head -n 1)
           if [ -n "$DIFF" ]; then
@@ -65,8 +78,3 @@ jobs:
               https://api.github.com/repos/${{ github.repository }}/issues/$PR_NUMBER/comments
             rm "$DIFF"
           fi
-
-      - name: Update snapshot cache if requested
-        if: github.event_name == 'push' && contains(github.event.head_commit.message, '--update-snapshot')
-        run: |
-          STORYBOOK_URL=http://localhost:6006 npx playwright test --update-snapshots
