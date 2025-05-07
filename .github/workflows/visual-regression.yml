@@ -35,7 +35,7 @@ jobs:
       - name: Serve Storybook in background
         run: |
           npx http-server storybook-static -p 6006 > storybook.log 2>&1 &
-          npx wait-on http://localhost:6006 --timeout 30000
+          npx wait-on http://127.0.0.1:6006 --timeout 30000
 
       - name: Print Storybook logs if previous step failed
         if: failure()
