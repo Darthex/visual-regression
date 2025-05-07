@@ -1,0 +1,80 @@
+name: Visual Regression
+
+on:
+  pull_request:
+    branches:
+      - main
+  push:
+    branches:
+      - main
+
+jobs:
+  visual-regression:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Setup Node
+        uses: actions/setup-node@v3
+        with:
+          node-version: 18
+
+      - name: Install dependencies
+        run: |
+          yarn install
+          npx playwright install --with-deps
+
+      - name: Build Storybook
+        run: yarn build-storybook
+
+      - name: Debug Storybook build output
+        run: ls -R storybook-static
+
+      - name: Serve Storybook in background
+        run: |
+          npx http-server storybook-static -p 6006 -a 0.0.0.0 > storybook.log 2>&1 &
+          npx wait-on http://127.0.0.1:6006 --timeout 30000
+
+      - name: Print Storybook logs if previous step failed
+        if: failure()
+        run: cat storybook.log || echo "No logs found"
+
+      - name: Restore Snapshot Cache
+        uses: actions/cache@v3
+        with:
+          path: .snapshots
+          key: snapshot-cache-main
+          restore-keys: |
+            snapshot-cache-
+
+      - name: Update snapshots if requested
+        if: contains(github.event.head_commit.message, '--update-snapshot')
+        run: |
+          echo "Updating snapshots..."
+          STORYBOOK_URL=http://localhost:6006 npx playwright test --update-snapshots
+
+      - name: Save updated snapshots to cache
+        if: contains(github.event.head_commit.message, '--update-snapshot')
+        uses: actions/cache@v3
+        with:
+          path: .snapshots
+          key: snapshot-cache-main
+          overwrite: true
+
+      - name: Run Visual Tests
+        run: |
+          STORYBOOK_URL=http://localhost:6006 npx playwright test || echo "failed" > test-status.txt
+
+      - name: Upload diff comment if test failed
+        run: |
+          DIFF=$(find .playwright -name "*.diff.png" | head -n 1)
+          if [ -n "$DIFF" ]; then
+            PR_NUMBER=$(jq --raw-output .pull_request.number "$GITHUB_EVENT_PATH")
+            curl -s -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
+              -X POST \
+              -d "{\"body\": \"**Visual regression detected.**\n\n![diff](https://github.com/${{ github.repository }}/raw/${{ github.head_ref }}/$DIFF)\"}" \
+              https://api.github.com/repos/${{ github.repository }}/issues/$PR_NUMBER/comments
+            rm "$DIFF"
+          fi
