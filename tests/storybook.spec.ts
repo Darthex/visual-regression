@@ -7,7 +7,7 @@ test.describe('Visual Regression for All Stories', () => {
 
   // @ts-ignore
   test.beforeAll(async () => {
-    const res = await fetch(`${STORYBOOK_URL}/stories.json`);
+    const res = await fetch(`${STORYBOOK_URL}/index.json`);
     const data = await res.json();
     storyIds = Object.keys(data.entries);
   });
